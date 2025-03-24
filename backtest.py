@@ -4,25 +4,70 @@ from matplotlib import pyplot as plt
 from factor_install import *
 from process_day import *
 
-def backtest_value(day_df,night_df,threshold,current_vol_threshold,factor_name):
+def backtest_value(day_df,night_df,symbol,threshold,current_vol_threshold,factor_name):
     long_threshold = threshold
     short_threshold = -threshold
 
+    position_limit = 150
+
+    tax_dict = {
+        'tax_ag':0.00005,
+        'tax_sp':0,
+        'tax_rb':0.0001,
+        'tax_ru':0.0002,
+        'tax_hc':0.0001,
+        'tax_fu':0.00005,
+        'tax_cu':0.0001
+        }
+    
+    tax = tax_dict[f"tax_{symbol}"]
+
     day_pnl, night_pnl = 0, 0
+    day_position,night_position = 0,0
+
+    day_df.reset_index(inplace=True)
+    night_df.reset_index(inplace=True)
     
     day_df['signal'] = ((day_df[factor_name] >= long_threshold) & (day_df['log_current_volume'] >= current_vol_threshold))*1 - ((day_df[factor_name] <= short_threshold) & (day_df['log_current_volume'] >= current_vol_threshold))*1
-    day_last_position = day_df['signal'].sum()
-    day_pnl += (-day_df[day_df['signal']==1]['AskPrice1'].sum() + day_df[day_df['signal']==-1]['BidPrice1'].sum())
+    
+    for i in range(len(day_df)):
+        if (day_position >= position_limit) and (day_df.at[i,'signal'] > 0):
+            day_df.at[i,'signal'] = 0
+        elif (day_position <= -position_limit) and (day_df.at[i,'signal'] < 0):
+            day_df.at[i,'signal'] = 0
+        elif (day_position <= position_limit) and (day_position >= -position_limit):
+            day_position += day_df.at[i,'signal']
+
+    # day_last_position = day_df['signal'].values[-1]
+    day_last_position = day_position
+    day_pnl += (-(day_df['AskPrice1'] * (day_df['signal']==1)).sum() + (day_df['BidPrice1'] * (day_df['signal']==-1)).sum() - (day_df['AskPrice1'] * (day_df['signal']==1) * tax).sum() - (day_df['BidPrice1'] * (day_df['signal']==-1) * tax).sum())
     day_force_price = 'AskPrice1' if day_last_position < 0 else 'BidPrice1'
     day_pnl += day_df[day_force_price].values[-1] * day_last_position
+
+            
+
+
+
     
 
     if not night_df.empty:
         night_df['signal'] = ((night_df[factor_name] >= long_threshold) & (night_df['log_current_volume'] >= current_vol_threshold))*1 - ((night_df[factor_name] <= short_threshold) & (night_df['log_current_volume'] >= current_vol_threshold))*1
-        night_pnl += (-night_df[night_df['signal']==1]['AskPrice1'].sum() + night_df[night_df['signal']==-1]['BidPrice1'].sum())
-        night_last_position = night_df['signal'].sum()
+        
+        for i in range(len(night_df)):
+            if (night_position >= position_limit) and (night_df.at[i,'signal'] > 0):
+                night_df.at[i,'signal'] = 0
+            elif (night_position <= -position_limit) and (night_df.at[i,'signal'] < 0):
+                night_df.at[i,'signal'] = 0
+            elif (night_position <= position_limit) and (night_position >= -position_limit):
+                night_position += night_df.at[i,'signal']
+
+        # night_last_position = night_df['signal'].values[-1]
+        night_last_position = night_position
+        night_pnl += (-(night_df['AskPrice1'] * (night_df['signal']==1)).sum() + (night_df['BidPrice1'] * (night_df['signal']==-1)).sum() - (night_df['AskPrice1'] * (night_df['signal']==1) * tax).sum() - (night_df['BidPrice1'] * (night_df['signal']==-1) * tax).sum())
         night_force_price = 'AskPrice1' if night_last_position < 0 else 'BidPrice1'
         night_pnl += night_df[night_force_price].values[-1] * night_last_position
+
+
 
     # day_df['signal'] = ((day_df[factor_name] >= long_threshold) & (day_df['log_current_volume'] >= current_vol_threshold))*1 - ((day_df[factor_name] <= short_threshold) & (day_df['log_current_volume'] >= current_vol_threshold))*1
     # day_df['position'] = day_df['signal'].where(day_df['signal']!= 0, np.nan)
@@ -106,7 +151,7 @@ def backtest(df,symbol,start_time,end_time,threshold,current_vol_threshold,facto
             night_df['frt_120'].fillna(0,inplace=True)
             factor_install(night_df,symbol)
 
-        backtest = backtest_value(day_df,night_df,threshold=threshold,current_vol_threshold = current_vol_threshold,factor_name=factor_name) 
+        backtest = backtest_value(day_df,night_df,symbol = symbol,threshold=threshold,current_vol_threshold = current_vol_threshold,factor_name=factor_name) 
         backtest_value_list.append(backtest)
 
         # concat_df = pd.concat([night_df,day_df],ignore_index=True)
