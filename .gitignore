@@ -1,6 +1,6 @@
 factor_parquet/
-gabage/
+ga/
 factor_h5/
-_pycache_/
+__pycache__/
 .idea/
 source/
